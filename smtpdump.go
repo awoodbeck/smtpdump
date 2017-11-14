@@ -5,11 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/mail"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mhale/smtpd"
@@ -58,6 +58,7 @@ func main() {
 	log.Fatalln(smtpd.ListenAndServe(addr, outputHandler(output, verbose), "SMTPDump", ""))
 }
 
+// outputHandler is called when a new message is received by the server.
 func outputHandler(output string, verbose bool) smtpd.Handler {
 	return func(origin net.Addr, from string, to []string, data []byte) {
 		now := time.Now()
@@ -71,7 +72,7 @@ func outputHandler(output string, verbose bool) smtpd.Handler {
 
 		log.Printf("Received mail from %q with subject %q\n", from, subject)
 
-		f, err := ioutil.TempFile(output, now.Format(time.RFC3339))
+		f, err := randFile(output, now.Format(time.RFC3339), "eml")
 		if err != nil {
 			log.Println(err)
 
@@ -102,4 +103,34 @@ func outputHandler(output string, verbose bool) smtpd.Handler {
 			log.Printf("Wrote %q\n", f.Name())
 		}
 	}
+}
+
+// randFile returns a pointer to a new file or an error.  If
+// dir is empty, the temporary directory is used.
+func randFile(dir, prefix, suffix string) (*os.File, error) {
+	var (
+		err error
+		f   *os.File
+	)
+
+	if dir == "" {
+		dir = os.TempDir()
+	}
+
+	// Make a reasonable number of attempts to find a unique file name.
+	for i := 0; i < 10000; i++ {
+		// Quick and Dirty congruential generator from Numerical Recipies.
+		r := int(time.Now().UnixNano()+int64(os.Getpid()))*1664525 + 1013904223
+		fn := fmt.Sprintf("%s_%d.%s", prefix, r, suffix)
+		name := filepath.Join(dir, fn)
+		f, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+		if os.IsExist(err) {
+			continue
+		}
+		if err == nil {
+			break
+		}
+	}
+
+	return f, err
 }
