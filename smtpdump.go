@@ -70,8 +70,6 @@ func main() {
 // outputHandler is called when a new message is received by the server.
 func outputHandler(output, ext string, verbose bool) smtpd.Handler {
 	return func(origin net.Addr, from string, to []string, data []byte) {
-		now := time.Now()
-
 		if verbose {
 			msg, err := mail.ReadMessage(bytes.NewReader(data))
 			if err != nil {
@@ -84,7 +82,7 @@ func outputHandler(output, ext string, verbose bool) smtpd.Handler {
 			log.Printf("Received mail from %q with subject %q\n", from, subject)
 		}
 
-		f, err := randFile(output, now.Format(time.RFC3339), ext)
+		f, err := randFile(output, time.Now().Format(time.UnixDate), ext)
 		if err != nil {
 			log.Println(err)
 
