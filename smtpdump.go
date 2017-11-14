@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	addr     string
-	hostname string
-	output   string
-	verbose  bool
+	addr      string
+	extension string
+	hostname  string
+	output    string
+	verbose   bool
 )
 
 func init() {
@@ -30,6 +31,7 @@ func init() {
 	flag.StringVar(&hostname, "hostname", hn, "Server host name")
 	flag.StringVar(&addr, "addr", "127.0.0.1:2525", "Listen address:port")
 	flag.StringVar(&output, "output", "", "Output directory (default to current directory)")
+	flag.StringVar(&extension, "extension", "eml", "Saved file extension")
 	flag.BoolVar(&verbose, "verbose", false, "verbose output")
 }
 
@@ -55,24 +57,34 @@ func main() {
 	if verbose {
 		log.Printf("Listening on %q ...\n", addr)
 	}
-	log.Fatalln(smtpd.ListenAndServe(addr, outputHandler(output, verbose), "SMTPDump", ""))
+	log.Fatalln(
+		smtpd.ListenAndServe(
+			addr,
+			outputHandler(output, extension, verbose),
+			"SMTPDump",
+			"",
+		),
+	)
 }
 
 // outputHandler is called when a new message is received by the server.
-func outputHandler(output string, verbose bool) smtpd.Handler {
+func outputHandler(output, ext string, verbose bool) smtpd.Handler {
 	return func(origin net.Addr, from string, to []string, data []byte) {
 		now := time.Now()
-		msg, err := mail.ReadMessage(bytes.NewReader(data))
-		if err != nil {
-			log.Println(err)
 
-			return
+		if verbose {
+			msg, err := mail.ReadMessage(bytes.NewReader(data))
+			if err != nil {
+				log.Println(err)
+
+				return
+			}
+			subject := msg.Header.Get("Subject")
+
+			log.Printf("Received mail from %q with subject %q\n", from, subject)
 		}
-		subject := msg.Header.Get("Subject")
 
-		log.Printf("Received mail from %q with subject %q\n", from, subject)
-
-		f, err := randFile(output, now.Format(time.RFC3339), "eml")
+		f, err := randFile(output, now.Format(time.RFC3339), ext)
 		if err != nil {
 			log.Println(err)
 
