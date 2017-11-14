@@ -80,21 +80,7 @@ func outputHandler(output string, verbose bool) smtpd.Handler {
 		}
 		defer func() { _ = f.Close() }()
 
-		_, err = f.WriteString(
-			fmt.Sprintf(
-				"From: %s\r\nTo: %v\r\nSubject: %s\r\nDate: %s\r\n\r\n",
-				from,
-				to,
-				subject,
-				now.Format(time.RFC1123Z)),
-		)
-		if err != nil {
-			log.Println(err)
-
-			return
-		}
-
-		_, err = io.Copy(f, msg.Body)
+		_, err = io.Copy(f, bytes.NewReader(data))
 		if err != nil {
 			log.Println(err)
 		}
