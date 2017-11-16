@@ -82,7 +82,7 @@ func outputHandler(output, ext string, verbose bool) smtpd.Handler {
 			log.Printf("Received mail from %q with subject %q\n", from, subject)
 		}
 
-		f, err := randFile(output, string(time.Now().UnixNano()), ext)
+		f, err := randFile(output, fmt.Sprintf("%d", time.Now().UnixNano()), ext)
 		if err != nil {
 			log.Println(err)
 
