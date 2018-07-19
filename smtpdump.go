@@ -17,6 +17,7 @@ import (
 
 var (
 	addr      string
+	debug     bool
 	extension string
 	hostname  string
 	output    string
@@ -32,6 +33,7 @@ func init() {
 	flag.StringVar(&addr, "addr", "127.0.0.1:2525", "Listen address:port")
 	flag.StringVar(&output, "output", "", "Output directory (default to current directory)")
 	flag.StringVar(&extension, "extension", "eml", "Saved file extension")
+	flag.BoolVar(&debug, "debug", false, "debug output")
 	flag.BoolVar(&verbose, "verbose", false, "verbose output")
 }
 
@@ -40,6 +42,11 @@ func main() {
 
 	if hostname == "" {
 		log.Fatalln("Hostname cannot be empty")
+	}
+
+	if debug {
+		smtpd.Debug = true
+		verbose = true
 	}
 
 	var err error
