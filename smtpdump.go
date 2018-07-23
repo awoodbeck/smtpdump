@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/mhale/smtpd"
+	"github.com/awoodbeck/smtpd"
 )
 
 var (
