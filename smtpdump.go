@@ -10,18 +10,25 @@ import (
 	"net/mail"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	c "github.com/fatih/color"
 
 	"github.com/awoodbeck/smtpd"
 )
 
 var (
 	addr      string
+	color     bool
 	debug     bool
 	extension string
 	hostname  string
 	output    string
 	verbose   bool
+
+	readPrintf  = c.New(c.FgGreen).Printf
+	writePrintf = c.New(c.FgCyan).Printf
 )
 
 func init() {
@@ -33,6 +40,7 @@ func init() {
 	flag.StringVar(&addr, "addr", "127.0.0.1:2525", "Listen address:port")
 	flag.StringVar(&output, "output", "", "Output directory (default to current directory)")
 	flag.StringVar(&extension, "extension", "eml", "Saved file extension")
+	flag.BoolVar(&color, "color", true, "color debug output")
 	flag.BoolVar(&debug, "debug", false, "debug output")
 	flag.BoolVar(&verbose, "verbose", false, "verbose output")
 }
@@ -47,6 +55,11 @@ func main() {
 	if debug {
 		smtpd.Debug = true
 		verbose = true
+
+		if !color {
+			readPrintf = fmt.Printf
+			writePrintf = fmt.Printf
+		}
 	}
 
 	var err error
@@ -61,17 +74,24 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	srv := &smtpd.Server{
+		Addr:    addr,
+		Handler: outputHandler(output, extension, verbose),
+		Appname: "SMTPDump",
+		LogRead: func(_, _, line string) {
+			line = strings.Replace(line, "\n", "\n  ", -1)
+			readPrintf("  %s\n", line)
+		},
+		LogWrite: func(_, _, line string) {
+			line = strings.Replace(line, "\n", "\n  ", -1)
+			writePrintf("  %s\n", line)
+		},
+	}
+
 	if verbose {
 		log.Printf("Listening on %q ...\n", addr)
 	}
-	log.Fatalln(
-		smtpd.ListenAndServe(
-			addr,
-			outputHandler(output, extension, verbose),
-			"SMTPDump",
-			"",
-		),
-	)
+	log.Fatalln(srv.ListenAndServe())
 }
 
 // outputHandler is called when a new message is received by the server.
