@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"io"
@@ -25,6 +26,9 @@ var (
 	hostname    string
 	pkey        = flag.String("key", "", "PEM-encoded private key")
 	output      = flag.String("output", "", "Output directory (default to current directory)")
+	minTLS11    = flag.Bool("tls11", false, "accept TLSv1.1 as a minimum")
+	minTLS12    = flag.Bool("tls12", false, "accept TLSv1.2 as a minimum")
+	minTLS13    = flag.Bool("tls13", false, "accept TLSv1.3 as a minimum")
 	verbose     = flag.Bool("verbose", false, "verbose output")
 	readPrintf  = c.New(c.FgGreen).Printf
 	writePrintf = c.New(c.FgCyan).Printf
@@ -88,7 +92,20 @@ func main() {
 		if err != nil {
 			log.Fatalln(err)
 		}
+
 		log.Println("Enabled TLS support")
+
+		switch {
+		case *minTLS13:
+			srv.TLSConfig.MinVersion = tls.VersionTLS13
+			log.Println("Minimum TLSv1.3 accepted")
+		case *minTLS12:
+			srv.TLSConfig.MinVersion = tls.VersionTLS12
+			log.Println("Minimum TLSv1.2 accepted")
+		case *minTLS11:
+			srv.TLSConfig.MinVersion = tls.VersionTLS11
+			log.Println("Minimum TLSv1.1 accepted")
+		}
 	}
 
 	if *verbose {
@@ -99,7 +116,7 @@ func main() {
 }
 
 // authHandler logs credentials and always returns true.
-func authHandler(origin net.Addr, mechanism string, username []byte, password []byte, shared []byte) (bool, error) {
+func authHandler(_ net.Addr, _ string, username []byte, password []byte, _ []byte) (bool, error) {
 	log.Printf("[AUTH] User: %q; Password: %q\n", username, password)
 	return true, nil
 }
@@ -138,7 +155,7 @@ func outputHandler(output, ext string, verbose bool) smtpd.Handler {
 	}
 }
 
-func rcptHandler(origin net.Addr, from string, to string) bool {
+func rcptHandler(_ net.Addr, from string, to string) bool {
 	log.Printf("[RCPT] %q => %q\n", from, to)
 	return true
 }
