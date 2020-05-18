@@ -19,19 +19,22 @@ import (
 )
 
 var (
-	addr        = flag.String("addr", "127.0.0.1:2525", "Listen address:port")
-	cert        = flag.String("cert", "", "PEM-encoded certificate")
-	color       = flag.Bool("color", true, "color debug output")
-	extension   = flag.String("extension", "eml", "Saved file extension")
-	hostname    string
-	pkey        = flag.String("key", "", "PEM-encoded private key")
-	output      = flag.String("output", "", "Output directory (default to current directory)")
-	minTLS11    = flag.Bool("tls11", false, "accept TLSv1.1 as a minimum")
-	minTLS12    = flag.Bool("tls12", false, "accept TLSv1.2 as a minimum")
-	minTLS13    = flag.Bool("tls13", false, "accept TLSv1.3 as a minimum")
-	verbose     = flag.Bool("verbose", false, "verbose output")
+	addr      = flag.String("addr", "127.0.0.1:2525", "Listen address:port")
+	cert      = flag.String("cert", "", "PEM-encoded certificate")
+	color     = flag.Bool("color", true, "color debug output")
+	discard   = flag.Bool("discard", false, "discard incoming messages")
+	extension = flag.String("extension", "eml", "Saved file extension")
+	output    = flag.String("output", "", "Output directory (default to current directory)")
+	minTLS11  = flag.Bool("tls11", false, "accept TLSv1.1 as a minimum")
+	minTLS12  = flag.Bool("tls12", false, "accept TLSv1.2 as a minimum")
+	minTLS13  = flag.Bool("tls13", false, "accept TLSv1.3 as a minimum")
+	pkey      = flag.String("key", "", "PEM-encoded private key")
+	verbose   = flag.Bool("verbose", false, "verbose output")
+
 	readPrintf  = c.New(c.FgGreen).Printf
 	writePrintf = c.New(c.FgCyan).Printf
+
+	hostname string
 )
 
 func init() {
@@ -71,11 +74,18 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	var handler smtpd.Handler
+	if *discard {
+		handler = discardHandler(*verbose)
+	} else {
+		handler = outputHandler(*output, *extension, *verbose)
+	}
+
 	srv := &smtpd.Server{
 		Addr:        *addr,
 		Appname:     "SMTPDump",
 		AuthHandler: authHandler,
-		Handler:     outputHandler(*output, *extension, *verbose),
+		Handler:     handler,
 		LogRead: func(_, _, line string) {
 			line = strings.Replace(line, "\n", "\n  ", -1)
 			_, _ = readPrintf("  %s\n", line)
@@ -119,6 +129,22 @@ func main() {
 func authHandler(_ net.Addr, _ string, username []byte, password []byte, _ []byte) (bool, error) {
 	log.Printf("[AUTH] User: %q; Password: %q\n", username, password)
 	return true, nil
+}
+
+func discardHandler(verbose bool) smtpd.Handler {
+	return func(origin net.Addr, from string, to []string, data []byte) {
+		if verbose {
+			msg, err := mail.ReadMessage(bytes.NewReader(data))
+			if err != nil {
+				log.Println(err)
+
+				return
+			}
+			subject := msg.Header.Get("Subject")
+
+			log.Printf("Received mail from %q with subject %q\n", from, subject)
+		}
+	}
 }
 
 // outputHandler is called when a new message is received by the server.
