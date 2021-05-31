@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
-	c "github.com/fatih/color"
+	"github.com/fatih/color"
 	"github.com/mhale/smtpd"
 )
 
 var (
 	addr      = flag.String("addr", "127.0.0.1:2525", "Listen address:port")
 	cert      = flag.String("cert", "", "PEM-encoded certificate")
-	color     = flag.Bool("color", true, "color debug output")
+	colorize  = flag.Bool("color", true, "colorize debug output")
 	discard   = flag.Bool("discard", false, "discard incoming messages")
 	extension = flag.String("extension", "eml", "Saved file extension")
 	output    = flag.String("output", "", "Output directory (default to current directory)")
@@ -31,8 +31,8 @@ var (
 	pkey      = flag.String("key", "", "PEM-encoded private key")
 	verbose   = flag.Bool("verbose", false, "verbose output")
 
-	readPrintf  = c.New(c.FgGreen).Printf
-	writePrintf = c.New(c.FgCyan).Printf
+	readPrintf  = color.New(color.FgGreen).Printf
+	writePrintf = color.New(color.FgCyan).Printf
 
 	hostname string
 )
@@ -56,7 +56,7 @@ func main() {
 	if smtpd.Debug {
 		*verbose = true
 
-		if !*color {
+		if !*colorize {
 			readPrintf = fmt.Printf
 			writePrintf = fmt.Printf
 		}
