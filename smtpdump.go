@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -17,6 +18,8 @@ import (
 	"github.com/fatih/color"
 	"github.com/mhale/smtpd"
 )
+
+const filePerm = 0o600
 
 var (
 	addr      = flag.String("addr", "127.0.0.1:2525", "Listen address:port")
@@ -37,16 +40,14 @@ var (
 	hostname string
 )
 
-func init() {
+func main() {
 	hn, err := os.Hostname()
 	if err != nil {
 		log.Fatalln(err)
 	}
+
 	flag.StringVar(&hostname, "hostname", hn, "Server host name")
 	flag.BoolVar(&smtpd.Debug, "debug", false, "debug output")
-}
-
-func main() {
 	flag.Parse()
 
 	if hostname == "" {
@@ -62,7 +63,6 @@ func main() {
 		}
 	}
 
-	var err error
 	if *output == "" {
 		*output, err = os.Getwd()
 		if err != nil {
@@ -87,11 +87,11 @@ func main() {
 		AuthHandler: authHandler,
 		Handler:     handler,
 		LogRead: func(_, _, line string) {
-			line = strings.Replace(line, "\n", "\n  ", -1)
+			line = strings.ReplaceAll(line, "\n", "\n  ")
 			_, _ = readPrintf("  %s\n", line)
 		},
 		LogWrite: func(_, _, line string) {
-			line = strings.Replace(line, "\n", "\n  ", -1)
+			line = strings.ReplaceAll(line, "\n", "\n  ")
 			_, _ = writePrintf("  %s\n", line)
 		},
 		HandlerRcpt: rcptHandler,
@@ -126,36 +126,34 @@ func main() {
 }
 
 // authHandler logs credentials and always returns true.
-func authHandler(_ net.Addr, _ string, username []byte, password []byte, _ []byte) (bool, error) {
+func authHandler(_ net.Addr, _ string, username, password, _ []byte) (bool, error) {
 	log.Printf("[AUTH] User: %q; Password: %q\n", username, password)
 	return true, nil
 }
 
 func discardHandler(verbose bool) smtpd.Handler {
-	return func(origin net.Addr, from string, to []string, data []byte) {
+	return func(_ net.Addr, from string, _ []string, data []byte) error {
 		if verbose {
 			msg, err := mail.ReadMessage(bytes.NewReader(data))
 			if err != nil {
-				log.Println(err)
-
-				return
+				return fmt.Errorf("reading message: %w", err)
 			}
 			subject := msg.Header.Get("Subject")
 
 			log.Printf("Received mail from %q with subject %q\n", from, subject)
 		}
+
+		return nil
 	}
 }
 
 // outputHandler is called when a new message is received by the server.
 func outputHandler(output, ext string, verbose bool) smtpd.Handler {
-	return func(origin net.Addr, from string, to []string, data []byte) {
+	return func(_ net.Addr, from string, _ []string, data []byte) (err error) {
 		if verbose {
-			msg, err := mail.ReadMessage(bytes.NewReader(data))
-			if err != nil {
-				log.Println(err)
-
-				return
+			msg, mErr := mail.ReadMessage(bytes.NewReader(data))
+			if mErr != nil {
+				return fmt.Errorf("reading message: %w", mErr)
 			}
 			subject := msg.Header.Get("Subject")
 
@@ -164,24 +162,24 @@ func outputHandler(output, ext string, verbose bool) smtpd.Handler {
 
 		f, err := randFile(output, fmt.Sprintf("%d", time.Now().UnixNano()), ext)
 		if err != nil {
-			log.Println(err)
-
-			return
+			return fmt.Errorf("creating output file: %w", err)
 		}
-		defer func() { _ = f.Close() }()
+		defer func() { err = errors.Join(err, f.Close()) }()
 
 		_, err = io.Copy(f, bytes.NewReader(data))
 		if err != nil {
-			log.Println(err)
+			return fmt.Errorf("writing message to file: %w", err)
 		}
 
 		if verbose {
 			log.Printf("Wrote %q\n", f.Name())
 		}
+
+		return nil
 	}
 }
 
-func rcptHandler(_ net.Addr, from string, to string) bool {
+func rcptHandler(_ net.Addr, from, to string) bool {
 	log.Printf("[RCPT] %q => %q\n", from, to)
 	return true
 }
@@ -199,12 +197,12 @@ func randFile(dir, prefix, suffix string) (*os.File, error) {
 	}
 
 	// Make a reasonable number of attempts to find a unique file name.
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		// Quick and Dirty congruential generator from Numerical Recipes.
 		r := int(time.Now().UnixNano()+int64(os.Getpid()))*1664525 + 1013904223
 		fn := fmt.Sprintf("%s_%d.%s", prefix, r, suffix)
 		name := filepath.Join(dir, fn)
-		f, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0600)
+		f, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, filePerm)
 		if os.IsExist(err) {
 			continue
 		}
